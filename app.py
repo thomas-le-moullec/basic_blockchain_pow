@@ -1,6 +1,7 @@
 from uuid import uuid4
 from flask import Flask, jsonify, request
 from blockchain import Blockchain
+import sys
 
 app = Flask(__name__)
 
@@ -46,6 +47,49 @@ def new_message():
     response = {'response' : f'Tx will be added to Block {index}'}
     return jsonify(response), 201
 
+@app.route('/nodes/subscribe', methods=['POST'])
+def subscribe_nodes():
+    data = request.get_json()
+
+    nodes = data.get('nodes')
+    if nodes is None:
+        return "Error: Incorrect nodes list", 400
+    print('list of nodes to subscribe endpoints')
+    print(nodes, '\n')
+    for node in nodes:
+        blockchain.register_node(node)
+
+    response = {
+        'response': 'New nodes have been added',
+        'list_nodes': list(blockchain.nodes),
+    }
+    return jsonify(response), 201
+
+@app.route('/nodes/getAll', methods=['GET'])
+def getAllNodes():
+    response = {
+        'network': 'List of nodes',
+        'list_nodes': list(blockchain.nodes),
+    }
+    return jsonify(response), 201
+
+@app.route('/nodes/consensus', methods=['GET'])
+def consensus():
+    updated = blockchain.consensus()
+
+    if updated:
+        response = {
+            'response': 'Current chain updated',
+            'new_chain': blockchain.chain
+        }
+    else:
+        response = {
+            'message': 'Our chain is authoritative',
+            'chain': blockchain.chain
+        }
+
+    return jsonify(response), 200
+
 @app.route('/chain', methods=['GET'])
 def full_chain():
     response = {
@@ -55,4 +99,8 @@ def full_chain():
     return jsonify(response), 200
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    if len(sys.argv) > 1:
+        param = sys.argv[1]
+    else:
+        param = 5000
+    app.run(host='0.0.0.0', port=param)

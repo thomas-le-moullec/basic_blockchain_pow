@@ -1,13 +1,16 @@
 import hashlib
 import json
+import requests
 
 from time import time
+from urllib.parse import urlparse
 
 class Blockchain(object):
 
     def __init__(self):
         self.chain = []
         self.current_tx = []
+        self.nodes = set()
 
         # Genesis block generation (1st block)
         self.new_block(previous_hash=1, proof=100)
@@ -67,3 +70,62 @@ class Blockchain(object):
         guess = f'{last_proof}{proof}'.encode()
         guess_hash = hashlib.sha512(guess).hexdigest()
         return guess_hash[:4] == "0000"
+
+    def register_node(self, address):
+        # Add a new node in the decentralized network / list of nodes
+        url = urlparse(address)
+        if url.netloc == "":
+            return False
+        self.nodes.add(url.netloc)
+        return True
+
+    def consensus(self):
+        """
+        Consensus function.
+        If 2 miners solve a block at almost the same time, then we will have 2 different blockchains in the network.
+        We need to wait for the next block to resolve the conflict, we just take the longest Blockchain.
+        In short, if there is a conflict on the blockchain, then the the longest chain wins.
+        :return:
+        """
+
+        Network = self.nodes
+        longest_chain = None
+        self_chain_length = len(self.chain)
+
+        for fullNode in Network:
+            # Fetch the chain of the neighbour nodes in the decentralized Network
+            response = requests.get(f'http://{fullNode}/chain')
+
+            if response.status_code == 200:
+                size = response.json()['size']
+                chain = response.json()['chain']
+
+                if size > self_chain_length and self.check_blockchain(chain):
+                    self_chain_length = size
+                    longest_chain = chain
+
+        # If longest_chain is not NULL, our chain is not up to date anymore
+        if longest_chain:
+            self.chain = longest_chain
+            return True
+
+        return False
+
+    def check_blockchain(self, chain):
+        # This function checks the entire blockchain validity.
+        # We check the previous block hash and the proof (With our PoW algorithm)
+        previous_block = chain[0]
+        index = 1
+
+        while index <  len(chain):
+            block = chain[index]
+            if block['previous_hash'] != self.hash(previous_block):
+                return False
+            if not self.valid_proof(previous_block['proof'], block['proof']):
+                return False
+
+            previous_block = block
+            index += 1
+
+        return True
+
